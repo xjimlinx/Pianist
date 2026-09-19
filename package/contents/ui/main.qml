@@ -19,6 +19,7 @@ PlasmoidItem {
     property bool archiveMode: false
     property int currentPage: 0
     property var collapsedGoalIds: ({})
+    property var goalNodePositions: ({})
     property string draft: ""
     property string statusText: "完全本地保存"
     property bool undoAvailable: false
@@ -141,6 +142,12 @@ PlasmoidItem {
             collapsedGoalIds = collapsed && typeof collapsed === "object" ? collapsed : ({})
         } catch (_) {
             collapsedGoalIds = ({})
+        }
+        try {
+            const positions = JSON.parse(Plasmoid.configuration.goalNodePositionsJson || "{}")
+            goalNodePositions = positions && typeof positions === "object" ? positions : ({})
+        } catch (_) {
+            goalNodePositions = ({})
         }
         revision++
         if (loaded.error.length > 0) {
@@ -396,6 +403,7 @@ PlasmoidItem {
         try {
             Store.deleteGoal(document, id)
             setGoalExpanded(id, true)
+            resetGoalNodePositions(id, false)
             scheduleSave("大目标已删除")
         } catch (error) {
             statusText = String(error)
@@ -430,6 +438,62 @@ PlasmoidItem {
 
     function toggleGoalExpanded(goalId) {
         setGoalExpanded(goalId, !goalIsExpanded(goalId))
+    }
+
+    function positionsForGoal(goalId) {
+        const positions = {}
+        const prefix = String(goalId) + ":"
+        for (const key in goalNodePositions) {
+            if (key.indexOf(prefix) === 0)
+                positions[key.slice(prefix.length)] = goalNodePositions[key]
+        }
+        return positions
+    }
+
+    function goalHasManualPositions(goalId) {
+        const prefix = String(goalId) + ":"
+        for (const key in goalNodePositions) {
+            if (key.indexOf(prefix) === 0)
+                return true
+        }
+        return false
+    }
+
+    function setGoalNodePosition(goalId, nodeId, x, y) {
+        const next = {}
+        for (const key in goalNodePositions)
+            next[key] = goalNodePositions[key]
+        next[String(goalId) + ":" + String(nodeId)] = { "x": x, "y": y }
+        goalNodePositions = next
+        Plasmoid.configuration.goalNodePositionsJson = JSON.stringify(next)
+        statusText = "已调整节点位置"
+    }
+
+    function resetGoalNodePosition(goalId, nodeId) {
+        const target = String(goalId) + ":" + String(nodeId)
+        if (goalNodePositions[target] === undefined)
+            return
+        const next = {}
+        for (const key in goalNodePositions) {
+            if (key !== target)
+                next[key] = goalNodePositions[key]
+        }
+        goalNodePositions = next
+        Plasmoid.configuration.goalNodePositionsJson = JSON.stringify(next)
+        statusText = "已恢复节点自动位置"
+    }
+
+    function resetGoalNodePositions(goalId, showStatus) {
+        const prefix = String(goalId) + ":"
+        const next = {}
+        for (const key in goalNodePositions) {
+            if (key.indexOf(prefix) !== 0)
+                next[key] = goalNodePositions[key]
+        }
+        goalNodePositions = next
+        Plasmoid.configuration.goalNodePositionsJson = JSON.stringify(next)
+        if (showStatus === undefined || showStatus)
+            statusText = "已重置目标的节点布局"
     }
 
     function openNewGoalNode(goalId) {
@@ -506,6 +570,7 @@ PlasmoidItem {
     function deleteGoalNode(goalId, nodeId) {
         try {
             Store.deleteGoalNode(document, goalId, nodeId)
+            resetGoalNodePosition(goalId, nodeId)
             scheduleSave("小目标已删除")
         } catch (error) {
             statusText = String(error)
@@ -1341,6 +1406,12 @@ PlasmoidItem {
                                                     enabled: !goalCardDelegate.completed
                                                     onTriggered: root.toggleGoalTermination(goalCardDelegate.goal.id)
                                                 }
+                                                QQC2.MenuItem {
+                                                    text: "重置节点布局"
+                                                    icon.name: "view-refresh"
+                                                    enabled: root.goalHasManualPositions(goalCardDelegate.goal.id)
+                                                    onTriggered: root.resetGoalNodePositions(goalCardDelegate.goal.id)
+                                                }
                                                 QQC2.MenuSeparator {}
                                                 QQC2.MenuItem {
                                                     text: "删除大目标"
@@ -1407,6 +1478,7 @@ PlasmoidItem {
                                     denseMode: Plasmoid.configuration.denseMode
                                     nodeShape: Number(Plasmoid.configuration.goalNodeShape)
                                     nodeSize: Number(Plasmoid.configuration.goalNodeSize)
+                                    nodePositions: root.positionsForGoal(goalCardDelegate.goal.id)
                                     onToggleNode: function(nodeId) {
                                         root.toggleGoalNode(goalCardDelegate.goal.id, nodeId)
                                     }
@@ -1415,6 +1487,12 @@ PlasmoidItem {
                                     }
                                     onDeleteNode: function(nodeId) {
                                         root.requestDeleteGoalNode(goalCardDelegate.goal.id, nodeId)
+                                    }
+                                    onMoveNode: function(nodeId, x, y) {
+                                        root.setGoalNodePosition(goalCardDelegate.goal.id, nodeId, x, y)
+                                    }
+                                    onResetNodePosition: function(nodeId) {
+                                        root.resetGoalNodePosition(goalCardDelegate.goal.id, nodeId)
                                     }
                                 }
 

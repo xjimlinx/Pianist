@@ -22,32 +22,65 @@ Item {
     property bool denseMode: false
     property int nodeShape: 0
     property int nodeSize: 1
+    property var nodePositions: ({})
+    property double draggingNodeId: -1
+    property real draggingX: 0
+    property real draggingY: 0
 
     signal toggleNode(double nodeId)
     signal editNode(double nodeId)
     signal deleteNode(double nodeId)
+    signal moveNode(double nodeId, real x, real y)
+    signal resetNodePosition(double nodeId)
 
     readonly property int effectiveNodeSize: denseMode ? 0 : Math.max(0, Math.min(2, nodeSize))
     readonly property bool terminated: Store.goalTerminated(goal)
-    readonly property real nodeWidth: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 7.4
-                                            : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 12
-                                                                      : Kirigami.Units.gridUnit * 9.4
-    readonly property real nodeHeight: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 5.4
-                                             : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 8.2
-                                                                       : Kirigami.Units.gridUnit * 6.4
-    readonly property real horizontalGap: Kirigami.Units.gridUnit * 1.6
-    readonly property real verticalGap: Kirigami.Units.gridUnit * 2.7
+    readonly property real nodeWidth: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 6.8
+                                            : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 11
+                                                                      : Kirigami.Units.gridUnit * 8.4
+    readonly property real nodeHeight: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 4.9
+                                             : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 7.4
+                                                                       : Kirigami.Units.gridUnit * 5.7
+    readonly property real horizontalGap: Kirigami.Units.gridUnit * 1.25
+    readonly property real verticalGap: Kirigami.Units.gridUnit * 2.05
     readonly property var layoutData: {
         revision
         return Store.goalLayout(goal, nodeWidth, nodeHeight, horizontalGap, verticalGap)
     }
 
+    function positionedEntry(entry) {
+        if (!entry)
+            return null
+        if (draggingNodeId === entry.node.id) {
+            return {
+                "node": entry.node,
+                "x": draggingX,
+                "y": draggingY,
+                "level": entry.level
+            }
+        }
+        const saved = nodePositions ? nodePositions[String(entry.node.id)] : undefined
+        if (saved !== undefined && isFinite(Number(saved.x)) && isFinite(Number(saved.y))) {
+            return {
+                "node": entry.node,
+                "x": Math.max(0, Math.min(layoutData.width - nodeWidth, Number(saved.x))),
+                "y": Math.max(0, Math.min(layoutData.height - nodeHeight, Number(saved.y))),
+                "level": entry.level
+            }
+        }
+        return entry
+    }
+
     function entryFor(nodeId) {
         for (let index = 0; index < layoutData.nodes.length; ++index) {
             if (layoutData.nodes[index].node.id === nodeId)
-                return layoutData.nodes[index]
+                return positionedEntry(layoutData.nodes[index])
         }
         return null
+    }
+
+    function hasManualPosition(nodeId) {
+        return nodePositions && nodePositions[String(nodeId)] !== undefined
     }
 
     function requirementText(node) {
@@ -66,6 +99,10 @@ Item {
 
     onLayoutDataChanged: connectionCanvas.requestPaint()
     onRevisionChanged: connectionCanvas.requestPaint()
+    onNodePositionsChanged: connectionCanvas.requestPaint()
+    onDraggingNodeIdChanged: connectionCanvas.requestPaint()
+    onDraggingXChanged: connectionCanvas.requestPaint()
+    onDraggingYChanged: connectionCanvas.requestPaint()
 
     Flickable {
         id: treeScroll
@@ -121,13 +158,15 @@ Item {
 
                     const offsetX = (treeContent.width - root.layoutData.width) / 2
                     for (let index = 0; index < root.layoutData.nodes.length; ++index) {
-                        const entry = root.layoutData.nodes[index]
+                        const entry = root.positionedEntry(root.layoutData.nodes[index])
                         const node = entry.node
                         const targetX = offsetX + entry.x + root.nodeWidth / 2
                         const targetY = entry.y
                         const unlocked = Store.nodeUnlocked(root.goal, node)
                         context.strokeStyle = node.completed_at !== null
-                                              ? Kirigami.Theme.highlightColor
+                                              ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                        Kirigami.Theme.highlightColor.g,
+                                                        Kirigami.Theme.highlightColor.b, 0.52)
                                               : unlocked ? root.glassBorder
                                                          : Qt.rgba(Kirigami.Theme.textColor.r,
                                                                    Kirigami.Theme.textColor.g,
@@ -158,6 +197,45 @@ Item {
                             context.stroke()
                         }
                     }
+
+                    // Nodes use translucent glass fills. Remove connector pixels
+                    // underneath their exact outlines so lines cannot show through.
+                    context.save()
+                    context.globalCompositeOperation = "destination-out"
+                    for (let index = 0; index < root.layoutData.nodes.length; ++index) {
+                        const entry = root.positionedEntry(root.layoutData.nodes[index])
+                        const x = offsetX + entry.x
+                        const y = entry.y
+                        const storedShape = Number(entry.node.shape)
+                        const shape = Number.isInteger(storedShape)
+                                      && storedShape >= 0 && storedShape <= 2
+                                      ? storedShape : root.nodeShape
+                        const radius = shape === 1 ? 0
+                                       : shape === 2 ? root.nodeHeight / 2 : root.cardRadius
+
+                        context.beginPath()
+                        if (radius <= 1) {
+                            context.rect(x, y, root.nodeWidth, root.nodeHeight)
+                        } else {
+                            const r = Math.min(radius, root.nodeWidth / 2, root.nodeHeight / 2)
+                            context.moveTo(x + r, y)
+                            context.lineTo(x + root.nodeWidth - r, y)
+                            context.quadraticCurveTo(x + root.nodeWidth, y,
+                                                     x + root.nodeWidth, y + r)
+                            context.lineTo(x + root.nodeWidth, y + root.nodeHeight - r)
+                            context.quadraticCurveTo(x + root.nodeWidth, y + root.nodeHeight,
+                                                     x + root.nodeWidth - r,
+                                                     y + root.nodeHeight)
+                            context.lineTo(x + r, y + root.nodeHeight)
+                            context.quadraticCurveTo(x, y + root.nodeHeight,
+                                                     x, y + root.nodeHeight - r)
+                            context.lineTo(x, y + r)
+                            context.quadraticCurveTo(x, y, x + r, y)
+                            context.closePath()
+                        }
+                        context.fill()
+                    }
+                    context.restore()
                 }
             }
 
@@ -168,6 +246,7 @@ Item {
                     id: nodeCard
                     required property var modelData
                     readonly property var node: modelData.node
+                    readonly property var positioned: root.positionedEntry(modelData)
                     readonly property bool completed: node.completed_at !== null
                     readonly property bool unlocked: Store.nodeUnlocked(root.goal, node)
                     readonly property int effectiveShape: Number.isInteger(node.shape)
@@ -177,18 +256,22 @@ Item {
                                                           || (nodeDescriptionLabel.visible
                                                               && nodeDescriptionLabel.truncated)
 
-                    x: (treeContent.width - root.layoutData.width) / 2 + modelData.x
-                    y: modelData.y
+                    x: (treeContent.width - root.layoutData.width) / 2 + positioned.x
+                    y: positioned.y
+                    z: root.draggingNodeId === node.id ? 4 : 1
                     width: root.nodeWidth
                     height: root.nodeHeight
                     radius: effectiveShape === 1 ? 1
                               : effectiveShape === 2 ? height / 2 : root.cardRadius
-                    color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                               Kirigami.Theme.highlightColor.g,
-                                               Kirigami.Theme.highlightColor.b, 0.22)
+                    color: completed ? Qt.rgba(root.glassSurface.r,
+                                               root.glassSurface.g,
+                                               root.glassSurface.b,
+                                               Math.max(root.glassSurface.a, 0.62))
                                      : nodeMouse.containsMouse && unlocked ? root.glassRaised : root.glassSurface
-                    border.width: completed || nodeMouse.containsMouse ? 2 : 1
-                    border.color: completed ? Kirigami.Theme.highlightColor
+                    border.width: nodeMouse.containsMouse ? 2 : 1
+                    border.color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                      Kirigami.Theme.highlightColor.g,
+                                                      Kirigami.Theme.highlightColor.b, 0.62)
                                            : nodeMouse.containsMouse && unlocked
                                              ? Qt.rgba(Kirigami.Theme.highlightColor.r,
                                                        Kirigami.Theme.highlightColor.g,
@@ -245,6 +328,66 @@ Item {
                                                     : root.effectiveNodeSize === 2 ? 3 : 2
                                 elide: Text.ElideRight
                                 font.weight: Font.DemiBold
+                            }
+                            Item {
+                                id: dragHandle
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 1.45
+                                Layout.preferredHeight: width
+
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    width: Kirigami.Units.iconSizes.small
+                                    height: width
+                                    source: "transform-move"
+                                    opacity: dragArea.containsMouse || dragArea.pressed ? 1 : 0.62
+                                }
+
+                                MouseArea {
+                                    id: dragArea
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton
+                                    hoverEnabled: true
+                                    preventStealing: true
+                                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.SizeAllCursor
+
+                                    property real pressX: 0
+                                    property real pressY: 0
+                                    property real startX: 0
+                                    property real startY: 0
+
+                                    onPressed: function(mouse) {
+                                        const point = mapToItem(treeContent, mouse.x, mouse.y)
+                                        pressX = point.x
+                                        pressY = point.y
+                                        startX = nodeCard.positioned.x
+                                        startY = nodeCard.positioned.y
+                                        root.draggingX = startX
+                                        root.draggingY = startY
+                                        root.draggingNodeId = nodeCard.node.id
+                                    }
+                                    onPositionChanged: function(mouse) {
+                                        if (!pressed)
+                                            return
+                                        const point = mapToItem(treeContent, mouse.x, mouse.y)
+                                        root.draggingX = Math.max(0, Math.min(
+                                            root.layoutData.width - root.nodeWidth,
+                                            startX + point.x - pressX))
+                                        root.draggingY = Math.max(0, Math.min(
+                                            root.layoutData.height - root.nodeHeight,
+                                            startY + point.y - pressY))
+                                    }
+                                    onReleased: {
+                                        const nodeId = nodeCard.node.id
+                                        const finalX = root.draggingX
+                                        const finalY = root.draggingY
+                                        root.moveNode(nodeId, finalX, finalY)
+                                        root.draggingNodeId = -1
+                                    }
+                                    onCanceled: root.draggingNodeId = -1
+                                }
+
+                                PlasmaComponents3.ToolTip.visible: dragArea.containsMouse
+                                PlasmaComponents3.ToolTip.text: "拖动节点"
                             }
                             PlasmaComponents3.ToolButton {
                                 id: nodeMenuButton
@@ -335,6 +478,12 @@ Item {
                             icon.name: "document-edit"
                             enabled: !root.terminated
                             onTriggered: root.editNode(nodeCard.node.id)
+                        }
+                        QQC2.MenuItem {
+                            text: "恢复自动位置"
+                            icon.name: "view-refresh"
+                            enabled: root.hasManualPosition(nodeCard.node.id)
+                            onTriggered: root.resetNodePosition(nodeCard.node.id)
                         }
                         QQC2.MenuSeparator {}
                         QQC2.MenuItem {
