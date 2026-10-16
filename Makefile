@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-PLUGIN_ID := io.github.baozixu99.litelist
+PLUGIN_ID := io.github.xjimlinx.pianist
 PACKAGE_TYPE := Plasma/Applet
 PACKAGE_DIR := $(CURDIR)/package
 
@@ -9,11 +9,10 @@ PLASMAWINDOWED ?= plasmawindowed
 QMLLINT ?= qmllint
 QMLTESTRUNNER ?= /usr/lib/qt6/bin/qmltestrunner
 NODE ?= node
-CARGO ?= cargo
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install update upgrade deploy reload restart uninstall preview test test-qml test-qml-runtime test-js test-rust
+.PHONY: help install update upgrade deploy reload restart uninstall preview test test-qml test-qml-runtime test-js test-shell
 
 help:
 	@printf '%s\n' \
@@ -24,7 +23,7 @@ help:
 		'  make restart   与 reload 相同（保留兼容）' \
 		'  make deploy    安装/更新并重启 plasmashell' \
 		'  make preview   更新后用 plasmawindowed 调试预览' \
-		'  make test      运行 QML、JavaScript 与 Rust 检查' \
+		'  make test      运行 QML、JavaScript 与脚本检查' \
 		'  make uninstall 卸载 Plasmoid（不会主动删除 KDE 配置）'
 
 install:
@@ -61,7 +60,7 @@ preview:
 	@command -v "$(PLASMAWINDOWED)" >/dev/null || { echo '缺少 plasmawindowed。'; exit 1; }
 	@"$(PLASMAWINDOWED)" -p org.kde.plasma.desktop "$(PLUGIN_ID)"
 
-test: test-qml test-qml-runtime test-js test-rust
+test: test-qml test-qml-runtime test-js test-shell
 
 test-qml:
 	@command -v "$(QMLLINT)" >/dev/null || { echo '缺少 qmllint。'; exit 1; }
@@ -84,6 +83,6 @@ test-js:
 	@command -v "$(NODE)" >/dev/null || { echo '缺少 Node.js。'; exit 1; }
 	@"$(NODE)" tests/store.test.js
 
-test-rust:
-	@command -v "$(CARGO)" >/dev/null || { echo '缺少 Cargo/Rust。'; exit 1; }
-	@"$(CARGO)" test
+test-shell:
+	@bash -n scripts/restart-plasma.sh tests/restart-plasma.test.sh
+	@bash tests/restart-plasma.test.sh

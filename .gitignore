@@ -1,7 +1,7 @@
-/target/
+/build/
 /dist/
-/data/
-/portable.flag
-*.pdb
+/.cache/
 *.tmp
+*.qmlc
+.DS_Store
 

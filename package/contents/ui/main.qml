@@ -125,7 +125,7 @@ PlasmoidItem {
     Plasmoid.icon: "view-calendar-tasks"
     Plasmoid.status: pendingCount > 0 ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
     // Desktop plasmoids are embedded in the shell rather than separate KWin
-    // windows. NoBackground prevents an opaque theme panel from covering our
+    // surfaces. NoBackground prevents an opaque theme panel from covering our
     // translucent surface; popups can still receive compositor blur from Plasma.
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     toolTipMainText: i18n("Pianist")

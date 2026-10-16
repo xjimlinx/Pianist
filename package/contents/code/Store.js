@@ -212,7 +212,7 @@ function normalizeDocument(value) {
             candidate = 1
         candidate = Math.max(candidate, largest + 1)
         if (!Number.isSafeInteger(candidate))
-            throw new Error("ID 超出跨平台 JSON 安全范围")
+            throw new Error("ID 超出 JSON 安全范围")
         return candidate
     }
     result.next_id = nextCounter(value.next_id, largestId)

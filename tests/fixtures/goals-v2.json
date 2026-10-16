@@ -38,7 +38,7 @@
         {
           "id": 2,
           "title": "完成测试",
-          "description": "验证两端一致",
+          "description": "验证功能与布局",
           "requires": [1],
           "shape": 2,
           "created_at": 1788969600000,

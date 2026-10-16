@@ -1,186 +1,134 @@
-# Pianist for KDE Plasma 6
+# Pianist
 
-Pianist 现在可以作为 KDE Plasma 6 原生小部件使用。它直接放在桌面或面板上，由 Plasma 管理位置、大小和启动，不再需要 Windows 托盘、Win32 窗口或独立后台进程。
+Pianist 是面向 KDE Plasma 6 的本地待办、便签与目标路线小部件。它作为 Plasmoid
+直接嵌入桌面或面板，由 Plasma 管理位置、尺寸和生命周期，不需要独立后台进程。
+
+## 功能
+
+- 待办的添加、编辑、排序、完成、恢复、删除与撤销
+- 桌面便签及多便签管理
+- 带多前置条件的大目标路线和科技树式节点
+- 多个大目标同时显示并独立折叠
+- 节点形状、尺寸和手动拖动位置
+- 到点提醒和可选的提前提醒
+- Plasma 原生主题、自适应颜色、半透明玻璃卡片与光晕
+- 字体、界面比例、透明度、圆角、边框和阴影设置
+- JSON 导入、导出及导入前备份
+- 多个桌面或面板实例自动关联同一份记录
 
 ## 安装
 
-需要 KDE Plasma 6.0 或更高版本。仓库中的小部件本身是 QML，不需要编译 Rust。
+需要 KDE Plasma 6、`kpackagetool6`、Node.js，以及用于开发检查的 Qt 6 QML 工具。
 
 ```bash
 git clone https://github.com/xjimlinx/Pianist.git
 cd Pianist
-kpackagetool6 --type Plasma/Applet --install package
-```
-
-然后右键桌面或面板，选择“进入编辑模式”→“添加小部件”，搜索 `Pianist`，拖到桌面或面板即可。
-
-更新已经安装的小部件：
-
-```bash
-kpackagetool6 --type Plasma/Applet --upgrade package
-```
-
-仓库也提供了统一命令。首次安装或日常更新可运行：
-
-```bash
 make install
 ```
 
-如果已有小部件仍显示旧界面，运行 `make reload`（`make restart` 与其等价）重启
-`plasmashell` 以重新加载 QML；也可以直接用 `make deploy` 完成安装/更新并重启。
-重启时桌面和面板会短暂消失，随后由 Plasma 用户服务自动恢复，小部件数据不会被清空。
+然后在 Plasma 的“添加小部件”窗口中搜索 `Pianist`。
 
-卸载：
+日常开发更新使用：
 
 ```bash
-kpackagetool6 --type Plasma/Applet --remove io.github.baozixu99.litelist
+make deploy
 ```
 
-若升级后 Plasma 没有立即刷新界面，可移除后重新添加该小部件；通常不需要重启桌面。
+该命令会升级 Plasmoid 并安全重启 `plasmashell`。桌面和面板会短暂消失，然后自动恢复。
 
-## 功能
+其他常用命令：
 
-- 在桌面上完整显示，放入面板时自动使用紧凑图标和待办数量角标
-- 原生 Plasma 磨砂玻璃背景、主题自适应配色、圆角卡片和悬停高光
-- 回车快速添加待办，粘贴多行内容可一次创建多条
-- 完成、恢复、编辑、删除、撤销，以及上移/下移排序
-- 独立的已完成列表和最近删除恢复
-- 小部件内便签，可创建、编辑和删除
-- “目标路线”可同时展示多个可折叠的大目标，支持直接终止/恢复废弃目标、多前置条件和科技树式分支连线
-- 到点提醒和可选的提前提醒，使用 KDE 原生通知显示
-- JSON 导入/导出，兼容原 Windows 版的版本 1/2 数据结构
-- 待办、便签、目标和通知记录统一保存到 `~/.config/Pianist.conf`，所有桌面实例自动关联，不需要登录或联网
-- 标准 Plasma 外观设置页，可调整玻璃和卡片不透明度、光晕、边框、阴影、圆角与目标节点形状
-
-## 使用说明
-
-在待办输入框中输入内容并按回车；任务右侧菜单提供编辑、提醒、排序和删除。右上角按钮可切换待办、便签、提醒记录和更多操作。
-
-右键小部件选择“配置 Pianist”，或从右上角菜单进入“外观设置”，可以使用“清透 / 平衡 / 浓郁”预设，也可以逐项调整：
-
-- 玻璃与任务卡片不透明度
-- 强调色光晕的开关、大小与强度，以及边框和阴影强度
-- 圆角大小与紧凑布局
-- 字体大小（75%–160%），会同时作用于主界面和各类对话框
-- 整体大小（75%–150%），缩放卡片高度、间距与目标节点
-- 目标节点的紧凑、标准或宽大尺寸，节点大小（75%–150%）可在此基础上继续缩放，以及圆角、直角或胶囊形状
-- 悬停动画、品牌标题和底部保存状态
-
-设置修改后会由 Plasma 自动保存，并立即反映在小部件上。
-
-### 大目标与目标路线
-
-顶部“目标”分页进入“目标路线”。页面会纵向展示全部大目标，每个目标可以独立展开或折叠；大目标用于描述最终成果，小目标是路线中的节点：
-
-1. 新建一个大目标，例如“发布 Pianist 1.0”。
-2. 添加没有前置条件的起始节点。
-3. 添加后续小目标时，可以勾选一个或多个已有节点作为前置条件。
-4. 前置节点全部完成后，后续节点才会解锁。
-
-路线会按依赖层级自动排列并绘制分支连线。标题和说明会根据节点尺寸显示多行，仍放不下时悬停节点可查看完整文字。全局设置可以选择默认节点形状，新建或编辑小目标时也能为单个节点指定不同形状。节点卡片本身不会改变完成状态，需要点击节点内明确的完成按钮，避免浏览或拖动时误触。节点层数增多时，路线会按实际高度展开并由目标页面统一滚动；横向分支超过可见宽度时，可拖动科技树空白处或使用底部滚动条浏览。一个节点被其他节点依赖时不能直接删除；已有完成节点依赖某项时，也不能贸然撤回该前置项。普通待办仍保持扁平、快速的操作方式，不会被强制放入目标树。
-
-提醒时间使用本地时间，格式为：
-
-```text
-2026-09-09 19:00
+```bash
+make test       # 运行 QML、JavaScript 和重启脚本测试
+make preview    # 在 plasmawindowed 中预览
+make reload     # 仅重启 plasmashell 重新加载 QML
+make uninstall  # 卸载 Plasmoid，不删除记录
 ```
 
-提醒由 `plasmashell` 内的定时器检查，因此用户需要保持 Plasma 会话运行。休眠或 Plasma 重启后，已经错过的到点提醒会在小部件恢复时补发；如果正式时间已到，只发送到点提醒，不重复发送过期的提前提醒。
+卸载也可以直接执行：
 
-Pianist 的待办、便签、目标和通知记录统一保存在：
+```bash
+kpackagetool6 --type Plasma/Applet --remove io.github.xjimlinx.pianist
+```
+
+## 数据存储与多实例
+
+待办、便签、目标和通知记录统一保存在：
 
 ```text
 ~/.config/Pianist.conf
 ```
 
-所有桌面或面板实例都会自动读取这份共享记录，因此插拔显示器、切换 Plasma 活动布局或重新添加小部件时，不需要重复导入。实例自己的折叠状态、节点拖动位置和外观设置仍由 Plasma 分别保存在 `~/.config/plasma-org.kde.plasma.desktop-appletsrc`，以适应不同屏幕尺寸。旧版本升级后会自动把现有实例的数据迁移到共享文件。
+所有 Pianist 实例都会读取这份共享记录。插拔显示器、切换布局或重新添加小部件时，
+新实例会自动关联已有数据；运行中的多个实例会定期同步。
 
-不建议直接编辑配置文件。请用小部件右上角菜单中的“JSON 导入 / 导出”迁移数据：可以直接“从文件导入…”选择 Windows 版导出的 JSON，也可以编辑或粘贴文本后导入，并用“复制 JSON”导出。“重新关联共享记录”可让当前实例立即重新载入统一记录。导入或重新关联覆盖当前内容前，Pianist 会保留一份备份，可在同一窗口恢复。
+折叠状态、节点拖动位置和外观设置按实例保存在 Plasma 配置中，以适应不同屏幕尺寸。
+不要直接编辑配置文件，迁移和备份请使用右上角菜单中的“JSON 导入 / 导出”。
 
-### 从原 Windows 版迁移
+## 目标路线
 
-1. 在 Windows 版中导出 JSON，或复制 `%LOCALAPPDATA%\LiteList\state.json`。
-2. 在 Plasma 小部件中打开“更多”→“JSON 导入 / 导出”。
-3. 用原 JSON 替换文本框内容，点击“从上方 JSON 导入”。
+“目标”页会纵向展示所有大目标。每个大目标包含一组小目标节点：
 
-任务、完成状态、显式设置的提醒、便签和通知记录会被读取。导入旧数据时会自动补充空的目标路线字段。Windows 窗口坐标不会在 Plasma 中使用，因为桌面小部件的位置由 Plasma 自己管理。
+1. 创建大目标并填写最终成果。
+2. 添加不需要前置条件的起始节点。
+3. 为后续节点选择一个或多个前置节点。
+4. 前置节点全部完成后，后续节点自动解锁。
 
-## 与原 Windows 版的差异
+依赖关系保存前会检测回环。节点卡片不会因误触直接完成，必须点击明确的完成按钮。
+路线超出可见宽度时可以拖动空白区域横向浏览；节点也可通过拖动图标调整位置。
 
-Plasma 小部件不需要托盘图标、全局快捷键或“开机启动”：登录 KDE 后，Plasma 会自动恢复桌面上的小部件。便签显示在 Pianist 小部件的便签页中，而不是创建绕过 Plasma 管理的独立顶层窗口。
+## 提醒
 
-磨砂模糊由 KDE 的桌面合成器提供。如果背景只有透明度而没有模糊，请在“系统设置 → 窗口管理 → 桌面特效”中启用“模糊”；禁用合成器时，小部件会使用较实的半透明底色保证文字清晰。
+提醒时间使用本地时间：
 
-原 Win32/Rust 实现仍保留在 `src/`，用于读取业务规则和数据格式，也方便继续维护 Windows 版本；Linux/KDE 的实际入口是 `package/contents/ui/main.qml`。
-
-### 跨平台功能架构
-
-Windows 继续使用 Win32/GDI+，Linux 继续使用 Plasma/QML。两端通过
-`shared/document.schema.json`、共同 JSON 夹具和相同的领域规则保持功能一致，
-不会要求 Windows 安装 Qt，也不会让 Plasmoid 依赖后台服务。目标路线数据现在可以由
-Windows 的 Rust 模型无损读写；Windows 原生目标路线界面直接使用这些领域 API。
-
-完整的数据所有权、依赖解锁、完成和删除规则见 `shared/feature-contract.md`。
-
-Windows 原生窗口也提供“待办 / 目标”页签。目标页支持同时显示多个大目标、独立折叠与终止/恢复、
-创建和编辑大目标与小目标、多选前置条件、三种节点形状、明确的完成按钮、纵向滚动，
-以及在分支超宽时拖动空白处或按住 Shift 滚轮横向浏览。界面仍由轻量的 Win32/GDI+
-绘制，不需要 Qt 或 KDE 运行库。
-
-## 开发与检查
-
-静态检查：
-
-```bash
-qmllint package/contents/code/Store.js package/contents/ui/main.qml
+```text
+2026-09-09 19:00
 ```
 
-运行数据模型测试（需要 Node.js）：
+提醒由 `plasmashell` 中的定时器检查，并通过 KDE 通知系统显示。会话恢复后，错过的
+到点提醒会补发。
+
+## Plasma 安全重启
+
+`make deploy` 和 `make reload` 使用独立看门狗检查新启动的 Plasma：
+
+- 持续验证 D-Bus 响应
+- 检测 2 GiB 内存硬上限
+- 检测观察期内超过 512 MiB 的异常增长
+- 检测持续高 CPU 与内存增长的组合故障
+
+如果检查失败，脚本会打印判定原因和最近的 Plasma/QML 日志，停止失控进程，隔离
+本次插件包，然后重新启动桌面。记录文件位于插件目录之外，不会随隔离操作丢失。
+
+默认观察 10 秒，可临时调整为 1–60 秒：
 
 ```bash
-node tests/store.test.js
+PIANIST_WATCHDOG_SECONDS=20 make deploy
 ```
 
-运行跨平台 Rust 领域模型测试：
-
-```bash
-cargo test
-```
-
-也可以一次运行上述 QML、JavaScript 与 Rust 检查：
-
-```bash
-make test
-```
-
-安装后，开发者可用 KDE 的 `plasmawindowed` 测试宿主预览。它只用于调试，正常使用时小部件由 `plasmashell` 直接加载，不会启动独立 Pianist 窗口或后台程序：
-
-```bash
-plasmawindowed -p org.kde.plasma.desktop io.github.baozixu99.litelist
-```
-
-小部件包结构：
+## 项目结构
 
 ```text
 package/
 ├── metadata.json
 └── contents/
-    ├── code/Store.js       数据校验、迁移、时间和提醒规则
-    ├── config/
-    │   ├── config.qml      Plasma 配置页注册
-    │   └── main.xml        每实例 KConfig 存储定义
+    ├── code/Store.js             数据校验、迁移、目标规则与提醒逻辑
+    ├── config/                   Plasma 配置定义
     └── ui/
-        ├── configAppearance.qml  玻璃外观设置
-        ├── GoalTree.qml          目标依赖布局、连线和节点卡片
-        └── main.qml              Plasma 6 主界面与 KDE 通知集成
-tests/store.test.js               数据模型测试
-tests/qml/GoalTreeHarness.qml     目标树渲染测试
-shared/
-├── document.schema.json          两端共同的 JSON Schema
-├── feature-contract.md           跨平台业务规则
-└── fixtures/goals-v2.json        Rust 与 JavaScript 共用夹具
+        ├── main.qml              主界面、共享存储与通知集成
+        ├── GoalTree.qml          目标依赖布局、连线与节点卡片
+        └── configAppearance.qml  外观设置
+scripts/
+└── restart-plasma.sh             带故障隔离的 Plasma 重启脚本
+tests/
+├── fixtures/                     数据模型夹具
+├── qml/                          可视化测试宿主
+├── store.test.js                 数据模型测试
+├── tst_goal_tree.qml             目标树运行测试
+├── tst_shared_settings.qml       多实例存储测试
+└── restart-plasma.test.sh        看门狗测试
 ```
 
 ## 许可
 
-项目使用 MIT 许可证。KDE、Qt 与 Rust 依赖遵循各自许可证。
+Pianist 使用 MIT 许可证。

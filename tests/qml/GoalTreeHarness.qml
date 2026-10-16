@@ -39,7 +39,7 @@ Window {
         interval: 800
         running: true
         onTriggered: window.contentItem.grabToImage(function(result) {
-            result.saveToFile("/tmp/litelist-goal-tree.png")
+            result.saveToFile("/tmp/pianist-goal-tree.png")
             Qt.quit()
         })
     }
