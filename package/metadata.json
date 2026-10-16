@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "LiteList contributors"
+                "Name": "Pianist contributors"
             }
         ],
         "Category": "Utilities",
@@ -12,10 +12,10 @@
         "Icon": "view-calendar-tasks",
         "Id": "io.github.baozixu99.litelist",
         "License": "MIT",
-        "Name": "LiteList",
-        "Name[zh_CN]": "轻单 LiteList",
+        "Name": "Pianist",
+        "Name[zh_CN]": "Pianist",
         "Version": "0.7.3",
-        "Website": "https://github.com/Baozixu99/LiteList"
+        "Website": "https://github.com/xjimlinx/Pianist"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

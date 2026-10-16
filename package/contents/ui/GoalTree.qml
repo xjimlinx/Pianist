@@ -22,6 +22,7 @@ Item {
     property bool denseMode: false
     property int nodeShape: 0
     property int nodeSize: 1
+    property real nodeScale: 1
     property var nodePositions: ({})
     property double draggingNodeId: -1
     property real draggingX: 0
@@ -34,15 +35,17 @@ Item {
     signal resetNodePosition(double nodeId)
 
     readonly property int effectiveNodeSize: denseMode ? 0 : Math.max(0, Math.min(2, nodeSize))
+    readonly property real effectiveNodeScale: isFinite(nodeScale)
+                                               ? Math.max(0.5, Math.min(2.25, nodeScale)) : 1
     readonly property bool terminated: Store.goalTerminated(goal)
-    readonly property real nodeWidth: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 6.8
+    readonly property real nodeWidth: (effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 6.8
                                             : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 11
-                                                                      : Kirigami.Units.gridUnit * 8.4
-    readonly property real nodeHeight: effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 4.9
+                                                                      : Kirigami.Units.gridUnit * 8.4) * effectiveNodeScale
+    readonly property real nodeHeight: (effectiveNodeSize === 0 ? Kirigami.Units.gridUnit * 4.9
                                              : effectiveNodeSize === 2 ? Kirigami.Units.gridUnit * 7.4
-                                                                       : Kirigami.Units.gridUnit * 5.7
-    readonly property real horizontalGap: Kirigami.Units.gridUnit * 1.25
-    readonly property real verticalGap: Kirigami.Units.gridUnit * 2.05
+                                                                       : Kirigami.Units.gridUnit * 5.7) * effectiveNodeScale
+    readonly property real horizontalGap: Kirigami.Units.gridUnit * 1.25 * effectiveNodeScale
+    readonly property real verticalGap: Kirigami.Units.gridUnit * 2.05 * effectiveNodeScale
     readonly property var layoutData: {
         revision
         return Store.goalLayout(goal, nodeWidth, nodeHeight, horizontalGap, verticalGap)

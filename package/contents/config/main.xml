@@ -64,6 +64,21 @@
       <min>60</min>
       <max>180</max>
     </entry>
+    <entry name="fontScale" type="Int">
+      <default>100</default>
+      <min>75</min>
+      <max>160</max>
+    </entry>
+    <entry name="uiScale" type="Int">
+      <default>100</default>
+      <min>75</min>
+      <max>150</max>
+    </entry>
+    <entry name="nodeScale" type="Int">
+      <default>100</default>
+      <min>75</min>
+      <max>150</max>
+    </entry>
     <entry name="denseMode" type="Bool">
       <default>false</default>
     </entry>

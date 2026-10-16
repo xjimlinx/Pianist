@@ -1,18 +1,18 @@
-# LiteList for KDE Plasma 6
+# Pianist for KDE Plasma 6
 
-LiteList（轻单）现在可以作为 KDE Plasma 6 原生小部件使用。它直接放在桌面或面板上，由 Plasma 管理位置、大小和启动，不再需要 Windows 托盘、Win32 窗口或独立后台进程。
+Pianist 现在可以作为 KDE Plasma 6 原生小部件使用。它直接放在桌面或面板上，由 Plasma 管理位置、大小和启动，不再需要 Windows 托盘、Win32 窗口或独立后台进程。
 
 ## 安装
 
 需要 KDE Plasma 6.0 或更高版本。仓库中的小部件本身是 QML，不需要编译 Rust。
 
 ```bash
-git clone https://github.com/Baozixu99/LiteList.git
-cd LiteList
+git clone https://github.com/xjimlinx/Pianist.git
+cd Pianist
 kpackagetool6 --type Plasma/Applet --install package
 ```
 
-然后右键桌面或面板，选择“进入编辑模式”→“添加小部件”，搜索 `LiteList` 或“轻单”，拖到桌面或面板即可。
+然后右键桌面或面板，选择“进入编辑模式”→“添加小部件”，搜索 `Pianist`，拖到桌面或面板即可。
 
 更新已经安装的小部件：
 
@@ -26,8 +26,8 @@ kpackagetool6 --type Plasma/Applet --upgrade package
 make install
 ```
 
-如果已有小部件仍显示旧界面，运行 `make reload` 请求轻量刷新；仍未生效时运行
-`make restart`。也可以直接用 `make deploy` 完成安装/更新并重启 `plasmashell`。
+如果已有小部件仍显示旧界面，运行 `make reload`（`make restart` 与其等价）重启
+`plasmashell` 以重新加载 QML；也可以直接用 `make deploy` 完成安装/更新并重启。
 重启时桌面和面板会短暂消失，随后由 Plasma 用户服务自动恢复，小部件数据不会被清空。
 
 卸载：
@@ -49,19 +49,21 @@ kpackagetool6 --type Plasma/Applet --remove io.github.baozixu99.litelist
 - “目标路线”可同时展示多个可折叠的大目标，支持直接终止/恢复废弃目标、多前置条件和科技树式分支连线
 - 到点提醒和可选的提前提醒，使用 KDE 原生通知显示
 - JSON 导入/导出，兼容原 Windows 版的版本 1/2 数据结构
-- 所有内容保存到当前 Plasma 小部件实例的 KConfig 配置，不需要登录或联网
+- 待办、便签、目标和通知记录统一保存到 `~/.config/Pianist.conf`，所有桌面实例自动关联，不需要登录或联网
 - 标准 Plasma 外观设置页，可调整玻璃和卡片不透明度、光晕、边框、阴影、圆角与目标节点形状
 
 ## 使用说明
 
 在待办输入框中输入内容并按回车；任务右侧菜单提供编辑、提醒、排序和删除。右上角按钮可切换待办、便签、提醒记录和更多操作。
 
-右键小部件选择“配置 LiteList”，或从右上角菜单进入“外观设置”，可以使用“清透 / 平衡 / 浓郁”预设，也可以逐项调整：
+右键小部件选择“配置 Pianist”，或从右上角菜单进入“外观设置”，可以使用“清透 / 平衡 / 浓郁”预设，也可以逐项调整：
 
 - 玻璃与任务卡片不透明度
 - 强调色光晕的开关、大小与强度，以及边框和阴影强度
 - 圆角大小与紧凑布局
-- 目标节点的紧凑、标准或宽大尺寸，以及圆角、直角或胶囊形状
+- 字体大小（75%–160%），会同时作用于主界面和各类对话框
+- 整体大小（75%–150%），缩放卡片高度、间距与目标节点
+- 目标节点的紧凑、标准或宽大尺寸，节点大小（75%–150%）可在此基础上继续缩放，以及圆角、直角或胶囊形状
 - 悬停动画、品牌标题和底部保存状态
 
 设置修改后会由 Plasma 自动保存，并立即反映在小部件上。
@@ -70,7 +72,7 @@ kpackagetool6 --type Plasma/Applet --remove io.github.baozixu99.litelist
 
 顶部“目标”分页进入“目标路线”。页面会纵向展示全部大目标，每个目标可以独立展开或折叠；大目标用于描述最终成果，小目标是路线中的节点：
 
-1. 新建一个大目标，例如“发布 LiteList 1.0”。
+1. 新建一个大目标，例如“发布 Pianist 1.0”。
 2. 添加没有前置条件的起始节点。
 3. 添加后续小目标时，可以勾选一个或多个已有节点作为前置条件。
 4. 前置节点全部完成后，后续节点才会解锁。
@@ -85,13 +87,15 @@ kpackagetool6 --type Plasma/Applet --remove io.github.baozixu99.litelist
 
 提醒由 `plasmashell` 内的定时器检查，因此用户需要保持 Plasma 会话运行。休眠或 Plasma 重启后，已经错过的到点提醒会在小部件恢复时补发；如果正式时间已到，只发送到点提醒，不重复发送过期的提前提醒。
 
-每个小部件实例保存一份独立清单。Plasma 将配置写入自己的 KConfig 文件，通常位于：
+Pianist 的待办、便签、目标和通知记录统一保存在：
 
 ```text
-~/.config/plasma-org.kde.plasma.desktop-appletsrc
+~/.config/Pianist.conf
 ```
 
-不建议直接编辑该文件。请用小部件右上角菜单中的“JSON 导入 / 导出”迁移数据。导入成功时，LiteList 会在该实例的 `backupJson` 配置项中保留导入前数据，可在同一窗口恢复。
+所有桌面或面板实例都会自动读取这份共享记录，因此插拔显示器、切换 Plasma 活动布局或重新添加小部件时，不需要重复导入。实例自己的折叠状态、节点拖动位置和外观设置仍由 Plasma 分别保存在 `~/.config/plasma-org.kde.plasma.desktop-appletsrc`，以适应不同屏幕尺寸。旧版本升级后会自动把现有实例的数据迁移到共享文件。
+
+不建议直接编辑配置文件。请用小部件右上角菜单中的“JSON 导入 / 导出”迁移数据：可以直接“从文件导入…”选择 Windows 版导出的 JSON，也可以编辑或粘贴文本后导入，并用“复制 JSON”导出。“重新关联共享记录”可让当前实例立即重新载入统一记录。导入或重新关联覆盖当前内容前，Pianist 会保留一份备份，可在同一窗口恢复。
 
 ### 从原 Windows 版迁移
 
@@ -103,7 +107,7 @@ kpackagetool6 --type Plasma/Applet --remove io.github.baozixu99.litelist
 
 ## 与原 Windows 版的差异
 
-Plasma 小部件不需要托盘图标、全局快捷键或“开机启动”：登录 KDE 后，Plasma 会自动恢复桌面上的小部件。便签显示在 LiteList 小部件的便签页中，而不是创建绕过 Plasma 管理的独立顶层窗口。
+Plasma 小部件不需要托盘图标、全局快捷键或“开机启动”：登录 KDE 后，Plasma 会自动恢复桌面上的小部件。便签显示在 Pianist 小部件的便签页中，而不是创建绕过 Plasma 管理的独立顶层窗口。
 
 磨砂模糊由 KDE 的桌面合成器提供。如果背景只有透明度而没有模糊，请在“系统设置 → 窗口管理 → 桌面特效”中启用“模糊”；禁用合成器时，小部件会使用较实的半透明底色保证文字清晰。
 
@@ -149,7 +153,7 @@ cargo test
 make test
 ```
 
-安装后，开发者可用 KDE 的 `plasmawindowed` 测试宿主预览。它只用于调试，正常使用时小部件由 `plasmashell` 直接加载，不会启动独立 LiteList 窗口或后台程序：
+安装后，开发者可用 KDE 的 `plasmawindowed` 测试宿主预览。它只用于调试，正常使用时小部件由 `plasmashell` 直接加载，不会启动独立 Pianist 窗口或后台程序：
 
 ```bash
 plasmawindowed -p org.kde.plasma.desktop io.github.baozixu99.litelist

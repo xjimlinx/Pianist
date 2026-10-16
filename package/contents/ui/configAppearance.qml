@@ -18,7 +18,12 @@ KCM.SimpleKCM {
     property alias cfg_borderStrength: borderStrength.value
     property alias cfg_shadowStrength: shadowStrength.value
     property alias cfg_cornerScale: cornerScale.value
+    property alias cfg_fontScale: fontScale.value
+    property alias cfg_uiScale: uiScale.value
+    property alias cfg_nodeScale: nodeScale.value
     property alias cfg_denseMode: denseMode.checked
+
+    readonly property real previewFontScale: fontScale.value / 100
     property alias cfg_animationsEnabled: animationsEnabled.checked
     property alias cfg_showBrand: showBrand.checked
     property alias cfg_showStatus: showStatus.checked
@@ -43,7 +48,8 @@ KCM.SimpleKCM {
         Kirigami.ShadowedRectangle {
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 7
+            implicitHeight: Kirigami.Units.gridUnit * 7
+            Layout.preferredHeight: implicitHeight
             Layout.bottomMargin: Kirigami.Units.largeSpacing
             radius: Kirigami.Units.cornerRadius * cornerScale.value / 100
             color: page.alphaColor(Kirigami.Theme.backgroundColor, glassOpacity.value / 100)
@@ -70,14 +76,14 @@ KCM.SimpleKCM {
                 spacing: Kirigami.Units.smallSpacing
 
                 Label {
-                    text: showBrand.checked ? "L I T E L I S T" : "外观预览"
+                    text: showBrand.checked ? "P I A N I S T" : "外观预览"
                     color: Kirigami.Theme.highlightColor
-                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize * page.previewFontScale
                     font.weight: Font.DemiBold
                 }
                 Label {
                     text: "近期要做"
-                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.35
+                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.35 * page.previewFontScale
                     font.weight: Font.DemiBold
                 }
                 Rectangle {
@@ -210,6 +216,22 @@ KCM.SimpleKCM {
         }
 
         RowLayout {
+            Kirigami.FormData.label: "节点大小："
+            Slider {
+                id: nodeScale
+                Layout.fillWidth: true
+                from: 75
+                to: 150
+                stepSize: 5
+            }
+            Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 2.5
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(nodeScale.value) + "%"
+            }
+        }
+
+        RowLayout {
             Kirigami.FormData.label: "边框强度："
             Slider {
                 id: borderStrength
@@ -257,6 +279,38 @@ KCM.SimpleKCM {
             }
         }
 
+        RowLayout {
+            Kirigami.FormData.label: "整体大小："
+            Slider {
+                id: uiScale
+                Layout.fillWidth: true
+                from: 75
+                to: 150
+                stepSize: 5
+            }
+            Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 2.5
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(uiScale.value) + "%"
+            }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: "字体大小："
+            Slider {
+                id: fontScale
+                Layout.fillWidth: true
+                from: 75
+                to: 160
+                stepSize: 5
+            }
+            Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 2.5
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(fontScale.value) + "%"
+            }
+        }
+
         CheckBox {
             id: denseMode
             Kirigami.FormData.label: "布局："
@@ -271,7 +325,7 @@ KCM.SimpleKCM {
         CheckBox {
             id: showBrand
             Kirigami.FormData.label: "内容："
-            text: "显示 LITELIST 品牌标题"
+            text: "显示 PIANIST 品牌标题"
         }
 
         CheckBox {

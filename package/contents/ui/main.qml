@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtCore as QtCore
 
 import org.kde.kirigami as Kirigami
 import org.kde.notification as KNotifications
@@ -24,26 +26,52 @@ PlasmoidItem {
     property string statusText: "完全本地保存"
     property bool undoAvailable: false
     property bool syncingNoteModel: false
+    property bool documentDirty: false
+    property string lastSharedDocumentJson: ""
+
+    readonly property string sharedDataPath:
+        QtCore.StandardPaths.writableLocation(QtCore.StandardPaths.ConfigLocation) + "/Pianist.conf"
+
+    QtCore.Settings {
+        id: sharedData
+        location: root.sharedDataPath
+        category: "Data"
+        property string documentJson: ""
+        property string backupJson: ""
+    }
 
     ListModel {
         id: noteListModel
     }
 
-    readonly property real glassAlpha: Math.max(0.25, Math.min(0.95,
-        Number(Plasmoid.configuration.glassOpacity) / 100))
-    readonly property real cardAlpha: Math.max(0.35, Math.min(1,
-        Number(Plasmoid.configuration.cardOpacity) / 100))
-    readonly property real accentAlpha: Math.max(0, Math.min(0.45,
-        Number(Plasmoid.configuration.accentStrength) / 100))
-    readonly property real decorativeGlowScale: Math.max(0.25, Math.min(1.1,
-        Number(Plasmoid.configuration.decorativeGlowSize) / 100))
-    readonly property real borderAlpha: Math.max(0, Math.min(0.5,
-        Number(Plasmoid.configuration.borderStrength) / 100))
-    readonly property real shadowAlpha: Math.max(0, Math.min(0.5,
-        Number(Plasmoid.configuration.shadowStrength) / 100))
-    readonly property real cornerFactor: Math.max(0.6, Math.min(1.8,
-        Number(Plasmoid.configuration.cornerScale) / 100))
-    readonly property real spacingFactor: Plasmoid.configuration.denseMode ? 0.68 : 1
+    function boundedNumber(value, fallback, minimum, maximum) {
+        const numericValue = Number(value)
+        if (!isFinite(numericValue))
+            return fallback
+        return Math.max(minimum, Math.min(maximum, numericValue))
+    }
+
+    readonly property real glassAlpha: boundedNumber(
+        Plasmoid.configuration.glassOpacity, 58, 25, 95) / 100
+    readonly property real cardAlpha: boundedNumber(
+        Plasmoid.configuration.cardOpacity, 78, 35, 100) / 100
+    readonly property real accentAlpha: boundedNumber(
+        Plasmoid.configuration.accentStrength, 13, 0, 45) / 100
+    readonly property real decorativeGlowScale: boundedNumber(
+        Plasmoid.configuration.decorativeGlowSize, 58, 25, 110) / 100
+    readonly property real borderAlpha: boundedNumber(
+        Plasmoid.configuration.borderStrength, 16, 0, 50) / 100
+    readonly property real shadowAlpha: boundedNumber(
+        Plasmoid.configuration.shadowStrength, 22, 0, 50) / 100
+    readonly property real cornerFactor: boundedNumber(
+        Plasmoid.configuration.cornerScale, 110, 60, 180) / 100
+    readonly property real uiScale: boundedNumber(
+        Plasmoid.configuration.uiScale, 100, 75, 150) / 100
+    readonly property real nodeScale: boundedNumber(
+        Plasmoid.configuration.nodeScale, 100, 75, 150) / 100
+    readonly property real spacingFactor: (Plasmoid.configuration.denseMode ? 0.68 : 1) * uiScale
+    readonly property real fontScale: boundedNumber(
+        Plasmoid.configuration.fontScale, 100, 75, 160) / 100
     readonly property int motionDuration: Plasmoid.configuration.animationsEnabled
                                           ? Kirigami.Units.shortDuration : 0
     readonly property real panelRadius: Kirigami.Units.cornerRadius * 2 * cornerFactor
@@ -93,14 +121,14 @@ PlasmoidItem {
         return document.goals.length
     }
 
-    Plasmoid.title: i18n("LiteList")
+    Plasmoid.title: i18n("Pianist")
     Plasmoid.icon: "view-calendar-tasks"
     Plasmoid.status: pendingCount > 0 ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
     // Desktop plasmoids are embedded in the shell rather than separate KWin
     // windows. NoBackground prevents an opaque theme panel from covering our
     // translucent surface; popups can still receive compositor blur from Plasma.
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
-    toolTipMainText: i18n("LiteList")
+    toolTipMainText: i18n("Pianist")
     toolTipSubText: i18np("%1 item pending", "%1 items pending", pendingCount)
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : null
 
@@ -133,10 +161,74 @@ PlasmoidItem {
         }
     }
 
-    function loadDocument() {
-        const loaded = Store.load(Plasmoid.configuration.documentJson)
+    function sharedDocumentText() {
+        return String(sharedData.value("documentJson", "") || "")
+    }
+
+    function availableBackupText() {
+        const sharedBackup = String(sharedData.value("backupJson", "") || "")
+        return sharedBackup.length > 0 ? sharedBackup
+                                       : String(Plasmoid.configuration.backupJson || "")
+    }
+
+    function writeSharedDocument(text) {
+        sharedData.setValue("documentJson", text)
+        sharedData.documentJson = text
+        sharedData.sync()
+        lastSharedDocumentJson = text
+    }
+
+    function writeBackup(text) {
+        sharedData.setValue("backupJson", text)
+        sharedData.backupJson = text
+        sharedData.sync()
+        Plasmoid.configuration.backupJson = text
+    }
+
+    function replaceDocument(loaded, statusMessage) {
         document = loaded.document
         rebuildNoteModel()
+        history = []
+        undoAvailable = false
+        documentDirty = false
+        revision++
+        if (statusMessage)
+            statusText = statusMessage
+    }
+
+    function loadDocument() {
+        sharedData.sync()
+        const sharedText = sharedDocumentText()
+        const localText = String(Plasmoid.configuration.documentJson || "")
+        let loaded = null
+        let sharedError = ""
+
+        if (sharedText.length > 0) {
+            loaded = Store.load(sharedText)
+            if (loaded.error.length > 0) {
+                sharedError = loaded.error
+                loaded = null
+                lastSharedDocumentJson = sharedText
+            }
+        }
+
+        if (!loaded) {
+            loaded = Store.load(localText)
+        }
+
+        if (loaded.error.length > 0) {
+            loaded = { document: Store.defaultDocument(), error: loaded.error }
+        }
+
+        replaceDocument(loaded, sharedText.length > 0 && sharedError.length === 0
+                                 ? "已关联共享记录" : "完全本地保存")
+        const normalized = JSON.stringify(document)
+        Plasmoid.configuration.documentJson = normalized
+        if (sharedText.length === 0)
+            writeSharedDocument(normalized)
+        else if (sharedError.length === 0)
+            lastSharedDocumentJson = sharedText
+
         try {
             const collapsed = JSON.parse(Plasmoid.configuration.collapsedGoalIdsJson || "{}")
             collapsedGoalIds = collapsed && typeof collapsed === "object" ? collapsed : ({})
@@ -149,8 +241,12 @@ PlasmoidItem {
         } catch (_) {
             goalNodePositions = ({})
         }
-        revision++
-        if (loaded.error.length > 0) {
+        if (sharedError.length > 0) {
+            statusText = "共享记录读取失败，已使用此实例的副本"
+            errorDialog.message = "共享记录无法读取：" + sharedError
+                + "\n\n已保留损坏文件，并改用当前桌面实例中的副本。"
+            errorDialog.open()
+        } else if (loaded.error.length > 0) {
             statusText = "数据读取失败，已使用空清单"
             errorDialog.message = loaded.error
             errorDialog.open()
@@ -159,14 +255,107 @@ PlasmoidItem {
     }
 
     function saveDocument() {
+        const encoded = JSON.stringify(document)
+        writeSharedDocument(encoded)
+        Plasmoid.configuration.documentJson = encoded
+        documentDirty = false
+    }
+
+    function syncDocumentFromShared() {
+        if (saveTimer.running)
+            return
+        sharedData.sync()
+        const sharedText = sharedDocumentText()
+        if (sharedText.length === 0 || sharedText === lastSharedDocumentJson)
+            return
+        lastSharedDocumentJson = sharedText
+        const loaded = Store.load(sharedText)
+        if (loaded.error.length > 0) {
+            statusText = "共享记录同步失败"
+            return
+        }
+        replaceDocument(loaded, "已同步共享记录")
         Plasmoid.configuration.documentJson = JSON.stringify(document)
+        checkReminders()
+    }
+
+    function associateSharedDocument() {
+        sharedData.sync()
+        const sharedText = sharedDocumentText()
+        if (sharedText.length === 0) {
+            saveDocument()
+            dataArea.text = JSON.stringify(document, null, 2)
+            dataMessage.text = "共享记录尚未建立，已用当前实例的数据创建并关联。"
+            return
+        }
+        const loaded = Store.load(sharedText)
+        if (loaded.error.length > 0) {
+            dataMessage.text = "无法关联共享记录：" + loaded.error
+            return
+        }
+        const currentText = JSON.stringify(document)
+        const incomingText = JSON.stringify(loaded.document)
+        if (currentText !== incomingText)
+            writeBackup(currentText)
+        replaceDocument(loaded, "已重新关联共享记录")
+        lastSharedDocumentJson = sharedText
+        Plasmoid.configuration.documentJson = incomingText
+        dataArea.text = JSON.stringify(document, null, 2)
+        dataMessage.text = currentText === incomingText
+            ? "当前实例已经关联共享记录。"
+            : "已载入共享记录；当前实例原数据已保留为备份。"
     }
 
     function scheduleSave(message) {
         revision++
+        documentDirty = true
         if (message)
             statusText = message
         saveTimer.restart()
+    }
+
+    function applyImportedDocument(text, sourceLabel) {
+        const loaded = Store.load(text)
+        if (loaded.error.length > 0)
+            return loaded.error
+        writeBackup(JSON.stringify(root.document))
+        root.document = loaded.document
+        root.rebuildNoteModel()
+        root.history = []
+        root.undoAvailable = false
+        root.scheduleSave(sourceLabel.length > 0 ? "已从文件导入 JSON" : "已导入 JSON 数据")
+        return ""
+    }
+
+    function importDocumentFromFile(url) {
+        const target = String(url)
+        const xhr = new XMLHttpRequest()
+        try {
+            xhr.open("GET", target, false)
+            xhr.send()
+        } catch (error) {
+            dataMessage.text = "无法读取文件：" + error
+            return
+        }
+        if (xhr.status !== 0 && (xhr.status < 200 || xhr.status >= 300)) {
+            dataMessage.text = "无法读取文件（状态 " + xhr.status + "）。"
+            return
+        }
+        if (xhr.responseText.length > 32 * 1024 * 1024) {
+            dataMessage.text = "文件超过 32 MB 上限，未导入。"
+            return
+        }
+        const error = root.applyImportedDocument(xhr.responseText, target)
+        dataMessage.text = error.length > 0 ? "无法导入：" + error
+                                            : "已从文件导入，原数据已保留为导入前备份。"
+        if (error.length === 0)
+            dataArea.text = JSON.stringify(root.document, null, 2)
+    }
+
+    function copyDocumentJson() {
+        dataArea.selectAll()
+        dataArea.copy()
+        dataMessage.text = "已复制当前 JSON 到剪贴板。"
     }
 
     function rememberTasks() {
@@ -612,13 +801,23 @@ PlasmoidItem {
     }
 
     Component.onCompleted: loadDocument()
-    Component.onDestruction: saveDocument()
+    Component.onDestruction: {
+        if (documentDirty)
+            saveDocument()
+    }
 
     Timer {
         id: saveTimer
         interval: 450
         repeat: false
         onTriggered: root.saveDocument()
+    }
+
+    Timer {
+        interval: 2000
+        repeat: true
+        running: true
+        onTriggered: root.syncDocumentFromShared()
     }
 
     Timer {
@@ -677,7 +876,7 @@ PlasmoidItem {
                 anchors.centerIn: parent
                 text: root.pendingCount > 99 ? "99+" : root.pendingCount
                 color: Kirigami.Theme.highlightedTextColor
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
             }
         }
     }
@@ -744,10 +943,10 @@ PlasmoidItem {
                     spacing: 0
 
                     PlasmaComponents3.Label {
-                        text: "L I T E L I S T"
+                        text: "P I A N I S T"
                         visible: Plasmoid.configuration.showBrand
                         color: Kirigami.Theme.highlightColor
-                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                         font.weight: Font.DemiBold
                         opacity: 0.9
                     }
@@ -756,7 +955,7 @@ PlasmoidItem {
                         text: root.currentPage === 0
                               ? (root.archiveMode ? "已完成" : "近期要做")
                               : root.currentPage === 1 ? "桌面便签" : "目标路线"
-                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.35
+                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.35 * root.fontScale
                         font.weight: Font.DemiBold
                     }
                 }
@@ -827,7 +1026,7 @@ PlasmoidItem {
                         icon.name: "document-import"
                         onTriggered: {
                             dataArea.text = JSON.stringify(root.document, null, 2)
-                            dataMessage.text = "编辑或粘贴 JSON 后点击导入；可用 Ctrl+A、Ctrl+C 导出。"
+                            dataMessage.text = "可“从文件导入…”，也可编辑或粘贴 JSON 后点击导入；用“复制 JSON”导出。"
                             dataDialog.open()
                         }
                     }
@@ -916,7 +1115,7 @@ PlasmoidItem {
                                         Layout.topMargin: Kirigami.Units.smallSpacing
                                         horizontalAlignment: Text.AlignHCenter
                                         text: root.archiveMode ? "还没有已完成的事项" : "现在很轻松"
-                                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.15
+                                        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.15 * root.fontScale
                                         font.weight: Font.DemiBold
                                     }
                                     PlasmaComponents3.Label {
@@ -924,7 +1123,7 @@ PlasmoidItem {
                                         horizontalAlignment: Text.AlignHCenter
                                         text: root.archiveMode ? "完成的事情会留在这里" : "把下一件要做的事写在下方"
                                         opacity: 0.62
-                                        font: Kirigami.Theme.smallFont
+                                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                     }
                                     PlasmaComponents3.Button {
                                         Layout.alignment: Qt.AlignHCenter
@@ -938,24 +1137,30 @@ PlasmoidItem {
                                 }
                             }
 
-                            delegate: Kirigami.AbstractCard {
+                            delegate: Item {
                                 id: taskCard
                                 required property var modelData
                                 required property int index
                                 width: taskList.width
-                                implicitHeight: taskRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-                                hoverEnabled: true
+                                height: Math.max(Kirigami.Units.gridUnit * 2.8 * root.uiScale,
+                                                 taskRow.implicitHeight
+                                                 + Kirigami.Units.smallSpacing * 2 * root.uiScale)
 
-                                background: Kirigami.ShadowedRectangle {
+                                HoverHandler {
+                                    id: taskHover
+                                }
+
+                                Kirigami.ShadowedRectangle {
+                                    anchors.fill: parent
                                     radius: root.cardRadius
-                                    color: taskCard.hovered ? root.glassRaised : root.glassSurface
+                                    color: taskHover.hovered ? root.glassRaised : root.glassSurface
                                     border.width: 1
-                                    border.color: taskCard.hovered
+                                    border.color: taskHover.hovered
                                                   ? Qt.rgba(Kirigami.Theme.highlightColor.r,
                                                             Kirigami.Theme.highlightColor.g,
                                                             Kirigami.Theme.highlightColor.b, 0.38)
                                                   : root.glassBorder
-                                    shadow.size: taskCard.hovered ? Kirigami.Units.smallSpacing : 0
+                                    shadow.size: taskHover.hovered ? Kirigami.Units.smallSpacing : 0
                                     shadow.color: root.glassShadow
                                     shadow.yOffset: 2
 
@@ -964,8 +1169,10 @@ PlasmoidItem {
                                     }
                                 }
 
-                                contentItem: RowLayout {
+                                RowLayout {
                                     id: taskRow
+                                    anchors.fill: parent
+                                    anchors.margins: Kirigami.Units.smallSpacing * root.uiScale
                                     spacing: Kirigami.Units.smallSpacing * root.spacingFactor
 
                                     PlasmaComponents3.CheckBox {
@@ -998,7 +1205,7 @@ PlasmoidItem {
                                             text: visible ? "提醒 " + Store.formatLocal(taskCard.modelData.reminder.due_at)
                                                           + (taskCard.modelData.reminder.early_at !== null ? " · 含提前提醒" : "") : ""
                                             color: Kirigami.Theme.highlightColor
-                                            font: Kirigami.Theme.smallFont
+                                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                         }
                                     }
 
@@ -1058,7 +1265,7 @@ PlasmoidItem {
                             PlasmaComponents3.TextArea {
                                 id: addField
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
+                                Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5 * root.uiScale
                                 placeholderText: "添加待办，回车记下"
                                 wrapMode: TextEdit.Wrap
                                 text: root.draft
@@ -1100,7 +1307,7 @@ PlasmoidItem {
                                 text: root.statusText
                                 visible: Plasmoid.configuration.showStatus
                                 opacity: 0.7
-                                font: Kirigami.Theme.smallFont
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                 elide: Text.ElideRight
                             }
                         }
@@ -1198,7 +1405,7 @@ PlasmoidItem {
                                             PlasmaComponents3.TextArea {
                                                 id: noteBodyEditor
                                                 Layout.fillWidth: true
-                                                Layout.preferredHeight: Kirigami.Units.gridUnit * 7
+                                                Layout.preferredHeight: Kirigami.Units.gridUnit * 7 * root.uiScale
                                                 text: noteCard.noteBody
                                                 placeholderText: "写点什么……"
                                                 wrapMode: TextEdit.Wrap
@@ -1249,7 +1456,7 @@ PlasmoidItem {
                                 Layout.fillWidth: true
                                 text: root.goalCount + " 个大目标"
                                 opacity: 0.7
-                                font: Kirigami.Theme.smallFont
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                             }
                             PlasmaComponents3.Button {
                                 text: "新建大目标"
@@ -1274,9 +1481,9 @@ PlasmoidItem {
 
                             ColumnLayout {
                                 id: goalColumn
-                                // The attached scrollbar is drawn over the Flickable.  Reserve its
-                                // full width plus a gutter so cards never sit underneath it.
-                                width: Math.max(0, goalList.width - goalScrollBar.width
+                                // Reserve a stable gutter. Depending on the live scrollbar width
+                                // would make wrapping alter its visibility and feed back into layout.
+                                width: Math.max(0, goalList.width - goalScrollBar.implicitWidth
                                                    - Kirigami.Units.largeSpacing)
                                 spacing: Kirigami.Units.largeSpacing
 
@@ -1358,7 +1565,7 @@ PlasmoidItem {
                                                 PlasmaComponents3.Label {
                                                     Layout.fillWidth: true
                                                     text: goalCardDelegate.goal.title
-                                                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.12
+                                                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.12 * root.fontScale
                                                     font.weight: Font.DemiBold
                                                     elide: Text.ElideRight
                                                 }
@@ -1373,7 +1580,7 @@ PlasmoidItem {
                                                            : goalCardDelegate.terminated
                                                              ? Kirigami.Theme.disabledTextColor
                                                            : Kirigami.Theme.highlightColor
-                                                    font: Kirigami.Theme.smallFont
+                                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                                 }
                                             }
 
@@ -1430,7 +1637,7 @@ PlasmoidItem {
                                             maximumLineCount: 2
                                             elide: Text.ElideRight
                                             opacity: 0.7
-                                            font: Kirigami.Theme.smallFont
+                                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                         }
 
                                         RowLayout {
@@ -1439,7 +1646,7 @@ PlasmoidItem {
                                             PlasmaComponents3.Label {
                                                 text: "路线进度"
                                                 opacity: 0.68
-                                                font: Kirigami.Theme.smallFont
+                                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                             }
                                             PlasmaComponents3.ProgressBar {
                                                 Layout.fillWidth: true
@@ -1478,6 +1685,7 @@ PlasmoidItem {
                                     denseMode: Plasmoid.configuration.denseMode
                                     nodeShape: Number(Plasmoid.configuration.goalNodeShape)
                                     nodeSize: Number(Plasmoid.configuration.goalNodeSize)
+                                    nodeScale: root.uiScale * root.nodeScale
                                     nodePositions: root.positionsForGoal(goalCardDelegate.goal.id)
                                     onToggleNode: function(nodeId) {
                                         root.toggleGoalNode(goalCardDelegate.goal.id, nodeId)
@@ -1516,7 +1724,8 @@ PlasmoidItem {
                                         PlasmaComponents3.Label {
                                             Layout.alignment: Qt.AlignHCenter
                                             text: goalCardDelegate.terminated ? "这个目标已经终止" : "从第一个小目标开始"
-                                            font: Kirigami.Theme.titleFont
+                                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.25 * root.fontScale
+                                            font.weight: Font.DemiBold
                                         }
                                         PlasmaComponents3.Label {
                                             Layout.alignment: Qt.AlignHCenter
@@ -1550,7 +1759,7 @@ PlasmoidItem {
                                         color: goalCardDelegate.completed
                                                ? Kirigami.Theme.highlightColor
                                                : Kirigami.Theme.disabledTextColor
-                                        font: Kirigami.Theme.smallFont
+                                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
                                         elide: Text.ElideRight
                                     }
                                     PlasmaComponents3.Button {
@@ -1572,6 +1781,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: goalDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double goalId: 0
         parent: root
         anchors.centerIn: parent
@@ -1585,7 +1795,7 @@ PlasmoidItem {
             PlasmaComponents3.TextField {
                 id: goalTitleField
                 Layout.fillWidth: true
-                placeholderText: "例如：发布 LiteList 1.0"
+                placeholderText: "例如：发布 Pianist 1.0"
                 maximumLength: 200
                 Keys.onReturnPressed: root.saveGoal()
             }
@@ -1610,6 +1820,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: goalNodeDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double goalId: 0
         property var requirementIds: []
         readonly property var targetGoal: {
@@ -1661,7 +1872,7 @@ PlasmoidItem {
                 visible: goalNodeDialog.targetNodeCount === 0
                 text: "第一个节点无需前置条件。"
                 opacity: 0.65
-                font: Kirigami.Theme.smallFont
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
             }
             QQC2.ScrollView {
                 Layout.fillWidth: true
@@ -1708,6 +1919,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: editGoalNodeDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double goalId: 0
         property double nodeId: 0
         property var requirementIds: []
@@ -1760,7 +1972,7 @@ PlasmoidItem {
                 text: "可直接调整依赖关系；系统会在形成回环时阻止保存。"
                 wrapMode: Text.Wrap
                 opacity: 0.65
-                font: Kirigami.Theme.smallFont
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
             }
             QQC2.ScrollView {
                 Layout.fillWidth: true
@@ -1800,7 +2012,7 @@ PlasmoidItem {
                 text: editGoalNodeDialog.requirementError
                 color: Kirigami.Theme.negativeTextColor
                 wrapMode: Text.Wrap
-                font: Kirigami.Theme.smallFont
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
             }
             PlasmaComponents3.Button {
                 Layout.alignment: Qt.AlignRight
@@ -1816,6 +2028,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: deleteGoalDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double goalId: 0
         property string goalTitle: ""
         parent: root
@@ -1843,6 +2056,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: deleteGoalNodeDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double goalId: 0
         property double nodeId: 0
         property string nodeTitle: ""
@@ -1872,6 +2086,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: editDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double taskId: 0
         parent: root
         anchors.centerIn: parent
@@ -1898,6 +2113,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: reminderDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property double taskId: 0
         property string taskTitle: ""
         parent: root
@@ -1957,6 +2173,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: notificationDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         parent: root
         anchors.centerIn: parent
         width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 27)
@@ -2004,6 +2221,7 @@ PlasmoidItem {
 
     QQC2.Dialog {
         id: dataDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         parent: root
         anchors.centerIn: parent
         width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 29)
@@ -2011,12 +2229,20 @@ PlasmoidItem {
         modal: true
         title: "JSON 导入 / 导出"
         standardButtons: QQC2.Dialog.Close
+        onOpened: dataArea.selectAll()
 
         contentItem: ColumnLayout {
             PlasmaComponents3.Label {
                 id: dataMessage
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
+            }
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                text: "共享记录：" + root.sharedDataPath
+                wrapMode: Text.WrapAnywhere
+                opacity: 0.65
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
             }
             PlasmaComponents3.TextArea {
                 id: dataArea
@@ -2027,11 +2253,42 @@ PlasmoidItem {
             }
             RowLayout {
                 Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                PlasmaComponents3.Button {
+                    text: "从文件导入…"
+                    icon.name: "document-open"
+                    onClicked: importFileDialog.open()
+                }
+                PlasmaComponents3.Button {
+                    text: "复制 JSON"
+                    icon.name: "edit-copy"
+                    onClicked: root.copyDocumentJson()
+                }
+                PlasmaComponents3.Button {
+                    text: "粘贴"
+                    icon.name: "edit-paste"
+                    onClicked: {
+                        dataArea.paste()
+                        dataMessage.text = "已粘贴剪贴板内容；点击“从上方 JSON 导入”确认。"
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                PlasmaComponents3.Button {
+                    text: "重新关联共享记录"
+                    icon.name: "view-refresh"
+                    onClicked: root.associateSharedDocument()
+                }
                 PlasmaComponents3.Button {
                     text: "恢复导入前备份"
-                    enabled: Plasmoid.configuration.backupJson.length > 0
+                    enabled: {
+                        root.revision
+                        return root.availableBackupText().length > 0
+                    }
                     onClicked: {
-                        dataArea.text = Plasmoid.configuration.backupJson
+                        dataArea.text = root.availableBackupText()
                         dataMessage.text = "已载入导入前备份；点击“从上方 JSON 导入”确认恢复。"
                     }
                 }
@@ -2040,51 +2297,53 @@ PlasmoidItem {
                     text: "从上方 JSON 导入"
                     icon.name: "document-import"
                     onClicked: {
-                        const loaded = Store.load(dataArea.text)
-                        if (loaded.error.length > 0) {
-                            dataMessage.text = "无法导入：" + loaded.error
-                            return
-                        }
-                        Plasmoid.configuration.backupJson = JSON.stringify(root.document)
-                        root.document = loaded.document
-                        root.rebuildNoteModel()
-                        root.history = []
-                        root.undoAvailable = false
-                        root.scheduleSave("已导入 JSON 数据")
-                        dataMessage.text = "导入成功，原数据已保留为导入前备份。"
+                        const error = root.applyImportedDocument(dataArea.text, "")
+                        dataMessage.text = error.length > 0 ? "无法导入：" + error
+                                                            : "导入成功，原数据已保留为导入前备份。"
                     }
                 }
             }
         }
     }
 
+    FileDialog {
+        id: importFileDialog
+        title: "选择要导入的 Pianist JSON"
+        nameFilters: ["JSON 文件 (*.json)", "所有文件 (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: root.importDocumentFromFile(selectedFile)
+    }
+
     QQC2.Dialog {
         id: helpDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         parent: root
         anchors.centerIn: parent
         width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 26)
         modal: true
-        title: "关于轻单"
+        title: "关于 Pianist"
         standardButtons: QQC2.Dialog.Close
         contentItem: PlasmaComponents3.Label {
             wrapMode: Text.Wrap
-            text: "LiteList 0.7.3 · KDE Plasma 6\n\n"
+            text: "Pianist 0.7.3 · KDE Plasma 6\n\n"
                 + "输入待办后按回车添加；任务菜单中可编辑、排序、设置提醒或删除。"
                 + "“已完成”页面保留完成记录，删除的任务可从右上角菜单恢复。\n\n"
                 + "目标页会同时显示所有大目标；每个目标可独立折叠。节点增多时可滚动页面，宽路线可拖动空白处浏览。\n\n"
-                + "便签与清单保存在当前 Plasma 小部件的配置中，不需要登录或联网。"
+                + "待办、便签和目标统一保存在 ~/.config/Pianist.conf，新建桌面实例会自动关联。"
+                + "折叠和节点位置等显示状态仍由各实例独立保存，不需要登录或联网。"
                 + "提醒由 KDE 通知系统显示；Plasma 必须保持运行。"
         }
     }
 
     QQC2.Dialog {
         id: errorDialog
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.fontScale
         property string message: ""
         parent: root
         anchors.centerIn: parent
         width: Math.min(root.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 24)
         modal: true
-        title: "LiteList 数据错误"
+        title: "Pianist 数据错误"
         standardButtons: QQC2.Dialog.Close
         contentItem: PlasmaComponents3.Label {
             text: errorDialog.message
